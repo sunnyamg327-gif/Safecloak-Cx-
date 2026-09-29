@@ -1,0 +1,382 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Smart Cloakroom Management System</title>
+    <!-- External Scanner & Barcode Libraries -->
+    <script src="https://cdn.jsdelivr.net/npm/jsbarcode@3.11.5/dist/JsBarcode.all.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
+    <script src="https://unpkg.com/html5-qrcode@2.3.8/html5-qrcode.min.js"></script>
+    <style>
+        * { box-sizing: border-box; margin: 0; padding: 0; font-family: sans-serif; }
+        body { background-color: #f4ecef; padding: 12px; color: #333; }
+        .header { background-color: #4a154b; color: #fff; text-align: center; padding: 15px; border-radius: 10px; margin-bottom: 15px; }
+        .card { background: #fff; border-radius: 10px; padding: 15px; margin-bottom: 15px; border-top: 4px solid #6b2d5c; box-shadow: 0 2px 8px rgba(0,0,0,0.1); }
+        .card-title { font-size: 16px; font-weight: bold; color: #4a154b; margin-bottom: 12px; border-bottom: 2px solid #f0e6ed; padding-bottom: 6px; }
+        .form-group { margin-bottom: 10px; }
+        label { display: block; font-size: 12px; font-weight: bold; margin-bottom: 4px; color: #4a154b; }
+        input, select { width: 100%; padding: 10px; font-size: 13px; border: 1px solid #ccc; border-radius: 6px; }
+        .bag-tag-box { background: #fdf8fa; border: 1px dashed #6b2d5c; padding: 10px; border-radius: 6px; margin-bottom: 10px; }
+        .btn-purple { width: 100%; padding: 12px; background-color: #6b2d5c; color: white; border: none; border-radius: 6px; font-size: 13px; font-weight: bold; cursor: pointer; margin-top: 8px; }
+        .btn-scan { width: 100%; padding: 10px; background-color: #28a745; color: white; border: none; border-radius: 6px; font-size: 13px; font-weight: bold; cursor: pointer; }
+        .info-row { display: flex; justify-content: space-between; font-size: 13px; padding: 6px 0; border-bottom: 1px dashed #eee; }
+        .info-label { font-weight: bold; color: #666; }
+        .info-value { font-weight: bold; color: #222; }
+        .img-preview { max-width: 100%; height: auto; border-radius: 6px; margin-top: 5px; border: 1px solid #ddd; display: none; }
+        .photo-section { background: #f0e6ed; padding: 10px; border-radius: 6px; margin-bottom: 10px; }
+        #scannerModal { display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.85); z-index: 9999; padding: 20px; color: #fff; text-align: center; }
+        #scannerContainer { width: 100%; max-width: 360px; min-height: 250px; margin: 10px auto; background: #000; border-radius: 8px; overflow: hidden; }
+        #scannerContainer video { width: 100% !important; height: auto !important; }
+    </style>
+</head>
+<body>
+
+    <div class="header">
+        <h2>LOCKER & CLOAKROOM SYSTEM</h2>
+        <p>AUTOMATED CHECK-IN / CHECK-OUT</p>
+    </div>
+
+    <!-- Live Camera Scanner Modal -->
+    <div id="scannerModal">
+        <h3 style="margin-top: 10px;">SCAN QR / BARCODE TAG</h3>
+        <div id="scannerContainer"></div>
+        <button class="btn-purple" style="background: #d9534f; max-width: 200px; margin: 5px auto;" onclick="closeScannerModal()">CLOSE SCANNER</button>
+    </div>
+
+    <!-- 1. CHECK-IN SECTION -->
+    <div class="card">
+        <div class="card-title">1. INWARD ENTRY (Check-In)</div>
+
+        <div class="form-group">
+            <label for="location">Location:</label>
+            <select id="location">
+                <option value="Dadar">Dadar Station</option>
+                <option value="LTT">Lokmanya Tilak Terminus (LTT)</option>
+            </select>
+        </div>
+
+        <div class="form-group">
+            <label for="agent">Attendant / Agent Name:</label>
+            <select id="agent">
+                <option value="Sunny">Sunny</option>
+                <option value="Agent 2">Agent 2</option>
+            </select>
+        </div>
+
+        <div class="form-group">
+            <label for="custName">Customer Name:</label>
+            <input type="text" id="custName" placeholder="Enter Customer Name">
+        </div>
+
+        <div class="form-group">
+            <label for="mobile">Mobile Number:</label>
+            <input type="number" id="mobile" placeholder="Enter Mobile Number">
+        </div>
+
+        <!-- ID Photo Upload & Preview -->
+        <div class="photo-section">
+            <label>Govt ID Proof Photo:</label>
+            <input type="file" accept="image/*" capture="environment" id="idProofPhoto" onchange="previewIDProofPhoto(event)">
+            <img id="idProofPhotoPreview" class="img-preview">
+        </div>
+
+        <div class="form-group">
+            <label for="bagCount">Total Bags Count:</label>
+            <input type="number" id="bagCount" value="1" min="1" max="10" oninput="renderTagFields()" onchange="renderTagFields()">
+        </div>
+
+        <div id="dynamicTagsContainer"></div>
+
+        <!-- Luggage Photo Upload & Preview -->
+        <div class="photo-section">
+            <label>Combined Luggage Photo:</label>
+            <input type="file" accept="image/*" capture="environment" id="groupLuggagePhoto" onchange="previewLuggagePhoto(event)">
+            <img id="groupPhotoPreview" class="img-preview">
+        </div>
+
+        <button class="btn-purple" onclick="generateInwardAndSave()">GENERATE RECEIPT SLIP</button>
+        <button class="btn-purple" style="background:#d9534f; margin-top:5px;" onclick="clearOldData()">CLEAR MEMORY (IF FULL)</button>
+
+        <div id="printableSlip" style="display:none; margin-top:15px; text-align:center; border:2px solid #4a154b; padding:10px; border-radius:8px;">
+            <h3>CLOAKROOM RECEIPT SLIP</h3>
+            <div id="slipDetails"></div>
+            <div id="qrcode" style="display:flex; justify-content:center; margin:10px 0;"></div>
+            <div id="barcodesContainer"></div>
+            <button class="btn-purple" style="background:#333;" onclick="window.print()">PRINT SLIP</button>
+        </div>
+    </div>
+
+    <!-- 2. CHECK-OUT SECTION -->
+    <div class="card">
+        <div class="card-title">2. CHECK-OUT & SCANNER (Set-Out)</div>
+
+        <div class="form-group">
+            <label for="scanCode">Scan Receipt QR or Bag Tag:</label>
+            <div style="display: flex; gap: 8px;">
+                <input type="text" id="scanCode" placeholder="Scan Tag/QR Code">
+                <button type="button" class="btn-scan" style="width: 120px;" onclick="openCameraScanner('setout')">📷 SCAN</button>
+            </div>
+        </div>
+
+        <button class="btn-purple" style="background-color: #4a154b;" onclick="fetchFromDatabase()">FETCH & DISPLAY RECORD</button>
+
+        <div id="customerDetails" style="display:none; background:#fafafa; padding:12px; border:1px solid #ddd; margin-top:10px; border-radius:6px;">
+            <div class="info-row"><span class="info-label">Customer Name:</span><span class="info-value" id="outCustName">-</span></div>
+            <div class="info-row"><span class="info-label">Mobile:</span><span class="info-value" id="outMobile">-</span></div>
+            <div class="info-row"><span class="info-label">Total Bags:</span><span class="info-value" id="outBags">-</span></div>
+            <div class="info-row"><span class="info-label">In Time:</span><span class="info-value" id="outInTime">-</span></div>
+            <div class="info-row"><span class="info-label">Duration:</span><span class="info-value" id="outDuration">-</span></div>
+            <div class="info-row"><span class="info-label">Total Amount:</span><span class="info-value" id="totalAmountText" style="color:#d9534f; font-size:16px;">₹0</span></div>
+
+            <div style="margin-top:10px;">
+                <label>Govt ID Document:</label>
+                <img id="outIDProofPhoto" class="img-preview" style="max-height:180px;">
+            </div>
+
+            <div style="margin-top:10px;">
+                <label>Luggage Photo:</label>
+                <img id="outLuggagePhoto" class="img-preview" style="max-height:180px;">
+            </div>
+
+            <button class="btn-scan" style="margin-top:15px; width:100%; padding:12px;" onclick="confirmSetOut()">CONFIRM CHECK-OUT</button>
+        </div>
+    </div>
+
+    <script>
+        var groupLuggagePhotoBase64 = "";
+        var idProofPhotoBase64 = "";
+        var html5QrCode = null;
+        var activeScanTarget = null;
+
+        function compressImage(file, callback) {
+            var reader = new FileReader();
+            reader.onload = function(e) {
+                var img = new Image();
+                img.onload = function() {
+                    var canvas = document.createElement("canvas");
+                    var ctx = canvas.getContext("2d");
+                    var maxWidth = 400;
+                    var scaleSize = maxWidth / img.width;
+                    canvas.width = maxWidth;
+                    canvas.height = img.height * scaleSize;
+
+                    ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
+                    var compressedBase64 = canvas.toDataURL("image/jpeg", 0.5);
+                    callback(compressedBase64);
+                };
+                img.src = e.target.result;
+            };
+            reader.readAsDataURL(file);
+        }
+
+        function renderTagFields() {
+            var bagInput = document.getElementById("bagCount");
+            if (!bagInput) return;
+            var count = parseInt(bagInput.value) || 1;
+            var container = document.getElementById("dynamicTagsContainer");
+            if (!container) return;
+            container.innerHTML = "";
+
+            for (var i = 1; i <= count; i++) {
+                var tagBox = document.createElement("div");
+                tagBox.className = "bag-tag-box";
+                tagBox.innerHTML = `
+                    <div style="font-size: 12px; font-weight: bold; color: #6b2d5c; margin-bottom: 6px;">BAG #${i} SCANNER</div>
+                    <div class="form-group">
+                        <label>Tag #${i} Code:</label>
+                        <div style="display:flex; gap:6px;">
+                            <input type="text" class="bag-tag-input" id="tag_input_${i}" placeholder="Enter or Scan Tag" style="background-color: #fff; font-weight: bold;">
+                            <button type="button" class="btn-scan" style="width: 110px;" onclick="openCameraScanner('tag_input_${i}')">📷 SCAN TAG</button>
+                        </div>
+                    </div>
+                `;
+                container.appendChild(tagBox);
+            }
+        }
+
+        function openCameraScanner(targetInputId) {
+            activeScanTarget = targetInputId;
+            document.getElementById("scannerModal").style.display = "block";
+
+            // Safe Check for HTTPS or Localhost
+            if (location.protocol !== 'https:' && location.hostname !== 'localhost' && location.hostname !== '127.0.0.1') {
+                alert("Warning: Mobile browsers require HTTPS for live camera access. If camera doesn't open, host this file on HTTPS.");
+            }
+
+            if(!html5QrCode) {
+                html5QrCode = new Html5Qrcode("scannerContainer");
+            }
+
+            const config = { fps: 10, qrbox: { width: 220, height: 220 } };
+
+            html5QrCode.start(
+                { facingMode: "environment" },
+                config,
+                onScanSuccess,
+                onScanFailure
+            ).catch(err => {
+                console.error("Camera Error: ", err);
+                alert("Camera Permission Error or HTTPS Required. You can type the code manually if camera fails.");
+                closeScannerModal();
+            });
+        }
+
+        function onScanSuccess(decodedText) {
+            closeScannerModal();
+            if(activeScanTarget === 'setout') {
+                document.getElementById("scanCode").value = decodedText;
+                fetchFromDatabase();
+            } else {
+                var targetElement = document.getElementById(activeScanTarget);
+                if(targetElement) {
+                    targetElement.value = decodedText;
+                }
+            }
+        }
+
+        function onScanFailure(error) {
+            // Noise reduction for continuous frame failures
+        }
+
+        function closeScannerModal() {
+            if(html5QrCode && html5QrCode.isScanning) {
+                html5QrCode.stop().then(() => {
+                    document.getElementById("scannerModal").style.display = "none";
+                }).catch((err) => {
+                    console.log("Stop Error", err);
+                    document.getElementById("scannerModal").style.display = "none";
+                });
+            } else {
+                document.getElementById("scannerModal").style.display = "none";
+            }
+        }
+
+        function previewIDProofPhoto(event) {
+            if(event.target.files && event.target.files[0]) {
+                compressImage(event.target.files[0], function(compressedData) {
+                    idProofPhotoBase64 = compressedData;
+                    var preview = document.getElementById("idProofPhotoPreview");
+                    preview.src = idProofPhotoBase64;
+                    preview.style.display = "block";
+                });
+            }
+        }
+
+        function previewLuggagePhoto(event) {
+            if(event.target.files && event.target.files[0]) {
+                compressImage(event.target.files[0], function(compressedData) {
+                    groupLuggagePhotoBase64 = compressedData;
+                    var preview = document.getElementById("groupPhotoPreview");
+                    preview.src = groupLuggagePhotoBase64;
+                    preview.style.display = "block";
+                });
+            }
+        }
+
+        function generateInwardAndSave() {
+            var name = document.getElementById("custName").value;
+            var mobile = document.getElementById("mobile").value;
+            var bagCount = parseInt(document.getElementById("bagCount").value) || 1;
+            
+            if(!name || !mobile) {
+                alert("Customer Name aur Mobile Number bharo!");
+                return;
+            }
+
+            var bagTags = [];
+            document.querySelectorAll(".bag-tag-input").forEach(input => {
+                if(input.value.trim()) bagTags.push(input.value.trim());
+            });
+
+            if(bagTags.length === 0) {
+                alert("Kam se kam 1 Tag scan ya enter karo!");
+                return;
+            }
+
+            var receiptCode = "QR-" + Math.floor(1000 + Math.random() * 9000);
+            var orderData = {
+                receiptCode: receiptCode,
+                customerName: name,
+                mobile: mobile,
+                bagCount: bagCount,
+                bagTags: bagTags,
+                checkInTimestamp: new Date().getTime(),
+                checkInTimeString: new Date().toLocaleString(),
+                idProofPhoto: idProofPhotoBase64,
+                luggagePhoto: groupLuggagePhotoBase64
+            };
+
+            try {
+                localStorage.setItem(receiptCode, JSON.stringify(orderData));
+                bagTags.forEach(tag => localStorage.setItem(tag, JSON.stringify(orderData)));
+            } catch (e) {
+                alert("Storage Full हो गई है! 'CLEAR MEMORY' बटन दबाकर पुरानी एंट्री हटाएं।");
+                return;
+            }
+
+            document.getElementById("slipDetails").innerHTML = `
+                <p><b>Receipt:</b> ${receiptCode}</p>
+                <p><b>Name:</b> ${name} | <b>Bags:</b> ${bagCount}</p>
+                <p><b>Time:</b> ${orderData.checkInTimeString}</p>
+            `;
+
+            document.getElementById("qrcode").innerHTML = "";
+            new QRCode(document.getElementById("qrcode"), { text: receiptCode, width: 120, height: 120 });
+
+            document.getElementById("printableSlip").style.display = "block";
+            alert("Receipt Generated Successfully!");
+        }
+
+        function fetchFromDatabase() {
+            var code = document.getElementById("scanCode").value.trim();
+            var data = localStorage.getItem(code);
+
+            if(data) {
+                var order = JSON.parse(data);
+                var diffHours = ((new Date().getTime() - order.checkInTimestamp) / (1000 * 60 * 60)).toFixed(2);
+                var rate = (diffHours > 24) ? 70 : 50;
+                var total = order.bagCount * rate;
+
+                document.getElementById("outCustName").innerText = order.customerName;
+                document.getElementById("outMobile").innerText = order.mobile;
+                document.getElementById("outBags").innerText = order.bagCount;
+                document.getElementById("outInTime").innerText = order.checkInTimeString;
+                document.getElementById("outDuration").innerText = diffHours + " Hours";
+                document.getElementById("totalAmountText").innerText = "₹" + total;
+
+                if(order.idProofPhoto) {
+                    var idImg = document.getElementById("outIDProofPhoto");
+                    idImg.src = order.idProofPhoto;
+                    idImg.style.display = "block";
+                }
+                if(order.luggagePhoto) {
+                    var lugImg = document.getElementById("outLuggagePhoto");
+                    lugImg.src = order.luggagePhoto;
+                    lugImg.style.display = "block";
+                }
+
+                document.getElementById("customerDetails").style.display = "block";
+            } else {
+                alert("Record Nahi Mila!");
+            }
+        }
+
+        function confirmSetOut() {
+            alert("Check-Out Successful & Luggage Released!");
+            document.getElementById("customerDetails").style.display = "none";
+        }
+
+        function clearOldData() {
+            if(confirm("क्या आप पुराना डेटा मिटाना चाहते हैं ताकि मेमोरी खाली हो जाए?")) {
+                localStorage.clear();
+                alert("मेमोरी खाली हो गई है! अब आप नया QR रसीद बना सकते हैं।");
+            }
+        }
+
+        window.addEventListener('DOMContentLoaded', function() {
+            renderTagFields();
+        });
+    </script>
+</body>
+</html>
